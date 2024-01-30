@@ -1,5 +1,7 @@
+from asyncio import QueueEmpty
 from datetime import datetime
-
+import queue
+from threading import Thread
 
 import speedtest as st
 import pandas as pd
@@ -60,30 +62,49 @@ def update_csv(internet_speeds):
 # print(new_speeds)
 
 app = Rocketry()
-pings = []
-uploads = []
-downloads = []
+pings = queue.Queue()
+uploads = queue.Queue()
+downloads = queue.Queue()
 
 fig = plt.figure()
 ax1 = fig.add_subplot(1, 1, 1)
 
+pl = []
+ul = []
+dl = []
 
-# @app.task(every("1 minute"))
+def test_speed():
+    while True:
+        print("testing speed...")
+        ping, down, up = get_new_speeds()
+        print("new value: ",ping, down, up)
+        pings.put(ping)
+        downloads.put(down)
+        uploads.put(up)
+
+
+
+
 def show_plot(i):
-    print("testing speed...")
-    ping, down, up = get_new_speeds()
-    pings.append(ping)
-    uploads.append(up)
-    downloads.append(down)
+    try :
+        pl.append(pings.get(block=False))
+        ul.append(uploads.get(block=False))
+        dl.append(downloads.get(block=False))
+        pings.task_done()
+        downloads.task_done()
+        uploads.task_done()
+    except Exception as ex:
+        pass
 
     ax1.clear()
-    ax1.plot(range(len(pings)), pings, label="ping")
-    ax1.plot(range(len(uploads)), uploads, label="upload")
-    ax1.plot(range(len(downloads)), downloads, label="download")
+    ax1.plot(range(len(pl)), pl, label="ping")
+    ax1.plot(range(len(ul)), ul, label="upload")
+    ax1.plot(range(len(dl)), dl, label="download")
     ax1.legend()
 
 
 if __name__ == "__main__":
-    # app.run()
-    ani = FuncAnimation(fig, show_plot, interval=60 * 1000)
+    t= Thread(target=test_speed, daemon=True)
+    t.start()
+    ani = FuncAnimation(plt.gcf(), show_plot, interval=5 * 1000)
     plt.show()
